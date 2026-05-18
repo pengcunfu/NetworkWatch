@@ -1,11 +1,13 @@
 using System.Diagnostics;
 using Microsoft.Diagnostics.Tracing;
+using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Session;
+using NetworkWatch.Helpers;
 
 namespace NetworkWatch.Services;
 
 /// <summary>
-/// Per-process TCP traffic via ETW (no administrator required).
+/// Per-process TCP traffic via kernel ETW (requires administrator on most Windows builds).
 /// </summary>
 internal sealed class EtwTrafficProvider : IDisposable
 {
@@ -18,15 +20,61 @@ internal sealed class EtwTrafficProvider : IDisposable
     private bool _disposed;
 
     public bool IsActive { get; private set; }
+    public bool UsesKernelProvider { get; private set; }
 
     public void Start()
     {
         if (_disposed)
             return;
 
+        if (AdminHelper.IsRunningAsAdministrator())
+        {
+            if (TryStartKernelSession())
+                return;
+        }
+
+        TryStartUserSession();
+    }
+
+    private bool TryStartKernelSession()
+    {
         try
         {
-            var sessionName = $"NetworkWatch-{Environment.ProcessId}";
+            var sessionName = "NetworkWatch-Kernel-" + Environment.ProcessId;
+            _session = new TraceEventSession(KernelTraceEventParser.KernelSessionName)
+            {
+                StopOnDispose = true,
+                BufferSizeMB = 64
+            };
+
+            _session.EnableKernelProvider(KernelTraceEventParser.Keywords.NetworkTCPIP);
+
+            var source = _session.Source;
+            var kernel = new KernelTraceEventParser(source);
+            kernel.TcpIpRecv += e => Add(e.ProcessID, (ulong)e.size, 0);
+            kernel.TcpIpSend += e => Add(e.ProcessID, 0, (ulong)e.size);
+            kernel.TcpIpRecvIPV6 += e => Add(e.ProcessID, (ulong)e.size, 0);
+            kernel.TcpIpSendIPV6 += e => Add(e.ProcessID, 0, (ulong)e.size);
+
+            StartProcessingThread();
+            IsActive = true;
+            UsesKernelProvider = true;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Kernel ETW failed: {ex.Message}");
+            _session?.Dispose();
+            _session = null;
+            return false;
+        }
+    }
+
+    private void TryStartUserSession()
+    {
+        try
+        {
+            var sessionName = "NetworkWatch-" + Guid.NewGuid().ToString("N");
             _session = new TraceEventSession(sessionName)
             {
                 StopOnDispose = true,
@@ -41,29 +89,35 @@ internal sealed class EtwTrafficProvider : IDisposable
             var source = _session.Source;
             source.Dynamic.All += OnTraceEvent;
 
-            _thread = new Thread(() =>
-            {
-                try
-                {
-                    source.Process();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"ETW processing stopped: {ex.Message}");
-                }
-            })
-            {
-                IsBackground = true,
-                Name = "NetworkWatch-Etw"
-            };
-            _thread.Start();
+            StartProcessingThread();
             IsActive = true;
+            UsesKernelProvider = false;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"ETW session failed: {ex.Message}");
+            Debug.WriteLine($"User ETW failed: {ex.Message}");
             Dispose();
         }
+    }
+
+    private void StartProcessingThread()
+    {
+        _thread = new Thread(() =>
+        {
+            try
+            {
+                _session?.Source.Process();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ETW processing stopped: {ex.Message}");
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "NetworkWatch-Etw"
+        };
+        _thread.Start();
     }
 
     private void OnTraceEvent(TraceEvent traceEvent)
@@ -152,6 +206,7 @@ internal sealed class EtwTrafficProvider : IDisposable
 
         _disposed = true;
         IsActive = false;
+        UsesKernelProvider = false;
 
         try
         {

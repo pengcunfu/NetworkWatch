@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using NetworkWatch.Helpers;
 using NetworkWatch.Models;
 using NetworkWatch.Native;
 using static NetworkWatch.Native.IpHelperNative;
@@ -12,6 +13,7 @@ public sealed class NetworkMonitorService : IDisposable
 
     private readonly Dictionary<string, (ulong In, ulong Out)> _previousBytes = new();
     private readonly Dictionary<int, (ulong In, ulong Out)> _previousEtwTotals = new();
+    private readonly HashSet<string> _statsInitialized = new();
     private readonly Dictionary<int, (string Name, string? Path)> _processCache = new();
     private readonly EtwTrafficProvider _etw = new();
     private DateTime _lastSample = DateTime.UtcNow;
@@ -115,11 +117,18 @@ public sealed class NetworkMonitorService : IDisposable
             .ThenByDescending(p => p.ConnectionCount)
             .ToList();
 
+        var isAdmin = AdminHelper.IsRunningAsAdministrator();
         string? hint = null;
-        if (!_etw.IsActive && statsEligible > 0 && statsSuccess == 0)
-            hint = "ETW 流量采集未启动，仅显示连接列表";
+        if (statsSuccess == 0 && !_etw.IsActive)
+        {
+            hint = isAdmin
+                ? "流量统计暂不可用，请稍候或重启应用"
+                : "建议右键 dev.bat → 以管理员身份运行，以启用完整流量统计";
+        }
         else if (_etw.IsActive && statsSuccess == 0)
             hint = "进程流量来自 ETW；单连接速率可能不可用";
+        else if (!_etw.IsActive && statsSuccess > 0 && !isAdmin)
+            hint = "当前为 TCP 连接级统计；管理员模式可启用 ETW 增强";
 
         return new MonitorSnapshot
         {
@@ -128,7 +137,7 @@ public sealed class NetworkMonitorService : IDisposable
             TotalConnections = enriched.Count,
             TotalDownloadRate = grouped.Sum(p => p.DownloadRate),
             TotalUploadRate = grouped.Sum(p => p.UploadRate),
-            IsElevated = false,
+            IsElevated = isAdmin,
             TrafficStatsSuccessCount = statsSuccess + etwRates.Count,
             TrafficStatsEligibleCount = Math.Max(statsEligible, grouped.Count(p => p.DownloadRate + p.UploadRate > 0)),
             StatusHint = hint
@@ -256,7 +265,10 @@ public sealed class NetworkMonitorService : IDisposable
     {
         var stale = _previousBytes.Keys.Where(k => !activeKeys.Contains(k)).ToList();
         foreach (var key in stale)
+        {
             _previousBytes.Remove(key);
+            _statsInitialized.Remove(key);
+        }
     }
 
     private bool TryReadTcpStats(RawConnection conn, out ulong bytesIn, out ulong bytesOut)
@@ -264,39 +276,89 @@ public sealed class NetworkMonitorService : IDisposable
         bytesIn = 0;
         bytesOut = 0;
 
+        if (!_statsInitialized.Contains(conn.Key))
+        {
+            TryEnableTcpStats(conn);
+            _statsInitialized.Add(conn.Key);
+        }
+
         var rw = new TcpEstatsDataRwV0 { EnableCollection = 1 };
         var rod = new TcpEstatsDataRodV0();
         var rwSize = TcpEstatsDataRwV0Size;
         var rodSize = TcpEstatsDataRodV0Size;
 
-        uint result;
-        if (conn.Protocol == "TCP")
-        {
-            var row = ToTcpRow(conn);
-            result = GetPerTcpConnectionEStats(
-                ref row,
-                TcpEstatsType.TcpConnectionEstatsData,
-                ref rw, 0, rwSize,
-                IntPtr.Zero, 0, 0,
-                ref rod, 0, rodSize);
-        }
-        else
-        {
-            var row6 = ToTcp6Row(conn);
-            result = GetPerTcp6ConnectionEStats(
-                ref row6,
-                TcpEstatsType.TcpConnectionEstatsData,
-                ref rw, 0, rwSize,
-                IntPtr.Zero, 0, 0,
-                ref rod, 0, rodSize);
-        }
-
-        if (result != 0)
+        if (!QueryTcpStats(conn, ref rw, rwSize, ref rod, rodSize))
             return false;
 
         bytesIn = rod.DataBytesIn;
         bytesOut = rod.DataBytesOut;
-        return bytesIn > 0 || bytesOut > 0;
+        if (bytesIn == 0 && bytesOut == 0)
+        {
+            bytesIn = rod.ThruBytesReceived;
+            bytesOut = rod.ThruBytesAcked;
+        }
+
+        return true;
+    }
+
+    private static void TryEnableTcpStats(RawConnection conn)
+    {
+        var rw = new TcpEstatsDataRwV0 { EnableCollection = 1 };
+        var rwSize = TcpEstatsDataRwV0Size;
+
+        if (conn.Protocol == "TCP")
+        {
+            var row = ToTcpRow(conn);
+            _ = SetPerTcpConnectionEStats(
+                ref row,
+                TcpEstatsType.TcpConnectionEstatsData,
+                ref rw, 0, rwSize,
+                IntPtr.Zero, 0, 0,
+                IntPtr.Zero, 0, 0);
+        }
+        else
+        {
+            var row6 = ToTcp6Row(conn);
+            _ = SetPerTcp6ConnectionEStats(
+                ref row6,
+                TcpEstatsType.TcpConnectionEstatsData,
+                ref rw, 0, rwSize,
+                IntPtr.Zero, 0, 0,
+                IntPtr.Zero, 0, 0);
+        }
+    }
+
+    private static bool QueryTcpStats(
+        RawConnection conn,
+        ref TcpEstatsDataRwV0 rw,
+        uint rwSize,
+        ref TcpEstatsDataRodV0 rod,
+        uint rodSize)
+    {
+        if (conn.Protocol == "TCP")
+        {
+            var row = ToTcpRow(conn);
+            if (GetPerTcpConnectionEStats(
+                    ref row,
+                    TcpEstatsType.TcpConnectionEstatsData,
+                    ref rw, 0, rwSize,
+                    IntPtr.Zero, 0, 0,
+                    ref rod, 0, rodSize) != 0)
+                return false;
+        }
+        else
+        {
+            var row6 = ToTcp6Row(conn);
+            if (GetPerTcp6ConnectionEStats(
+                    ref row6,
+                    TcpEstatsType.TcpConnectionEstatsData,
+                    ref rw, 0, rwSize,
+                    IntPtr.Zero, 0, 0,
+                    ref rod, 0, rodSize) != 0)
+                return false;
+        }
+
+        return true;
     }
 
     private static MibTcpRow ToTcpRow(RawConnection conn) => new()
