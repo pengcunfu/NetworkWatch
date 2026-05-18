@@ -1,5 +1,3 @@
 <Solution>
-  <Folder Name="/src/">
-    <Project Path="src/NetworkWatch/NetworkWatch.csproj" />
-  </Folder>
+  <Project Path="NetworkWatch.csproj" />
 </Solution>

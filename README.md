@@ -16,33 +16,25 @@ Windows 桌面网络流量监控工具，按进程展示 TCP/UDP 连接、上传
 
 ## 构建与运行
 
-双击或在项目根目录执行：
-
 ```bat
-run.bat
+dev.bat
 ```
 
-PowerShell：
-
-```powershell
-.\run.ps1
-```
-
-也可手动运行：
+或：
 
 ```bash
 cd d:\Projects\DevTools\NetworkWatch
-dotnet run --project src/NetworkWatch
+dotnet run
 ```
 
 发布独立可执行文件：
 
 ```bash
-dotnet publish src/NetworkWatch -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
 ## 说明
 
 - 流量统计基于 Windows IP Helper API（`GetPerTcpConnectionEStats`），主要覆盖 **TCP** 连接；UDP 可显示连接，但系统不提供同等粒度的逐连接字节计数。
-- **无需管理员权限**：进程级流量通过 ETW（`Microsoft-Windows-TCPIP`）统计；单连接速率在可能时通过 IP Helper 补充。
+- 建议 **以管理员身份运行** `dev.bat` 以启用完整流量统计（ETW + TCP 统计）。
 - 部分系统进程可能无法统计流量（状态栏会显示「流量采样: 成功数/可统计数」）。
