@@ -50,3 +50,4 @@ $RECYCLE.BIN/
 *.tmp
 *.temp
 *.cache
+.claude/

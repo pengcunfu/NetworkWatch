@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Net;
 using System.Runtime.InteropServices;
 using NetworkWatch.Models;
 using NetworkWatch.Native;
@@ -12,8 +11,9 @@ public sealed class NetworkMonitorService : IDisposable
     private delegate uint IpTableGetter(IntPtr buffer, ref int size, bool order, int family, int tableClass, uint reserved);
 
     private readonly Dictionary<string, (ulong In, ulong Out)> _previousBytes = new();
+    private readonly Dictionary<int, (ulong In, ulong Out)> _previousEtwTotals = new();
     private readonly Dictionary<int, (string Name, string? Path)> _processCache = new();
-    private readonly HashSet<string> _statsEnabled = new();
+    private readonly EtwTrafficProvider _etw = new();
     private DateTime _lastSample = DateTime.UtcNow;
     private bool _disposed;
 
@@ -24,6 +24,7 @@ public sealed class NetworkMonitorService : IDisposable
     public void Start()
     {
         _lastSample = DateTime.UtcNow;
+        _etw.Start();
         _ = RunLoopAsync();
     }
 
@@ -66,6 +67,8 @@ public sealed class NetworkMonitorService : IDisposable
 
         var activeKeys = new HashSet<string>();
         var enriched = new List<EnrichedConnection>();
+        var statsSuccess = 0;
+        var statsEligible = 0;
 
         foreach (var conn in connections)
         {
@@ -74,10 +77,15 @@ public sealed class NetworkMonitorService : IDisposable
 
             ulong bytesIn = 0;
             ulong bytesOut = 0;
-            if (conn.Protocol is "TCP" or "TCP6" && TryReadTcpStats(conn, out var statsIn, out var statsOut))
+            if (conn.Protocol is "TCP" or "TCP6" && SupportsTrafficStats(conn.StateCode))
             {
-                bytesIn = statsIn;
-                bytesOut = statsOut;
+                statsEligible++;
+                if (TryReadTcpStats(conn, out var statsIn, out var statsOut))
+                {
+                    statsSuccess++;
+                    bytesIn = statsIn;
+                    bytesOut = statsOut;
+                }
             }
 
             double downRate = 0;
@@ -96,12 +104,22 @@ public sealed class NetworkMonitorService : IDisposable
 
         PruneStaleKeys(activeKeys);
 
+        var etwRates = _etw.IsActive
+            ? _etw.ComputeRates(_previousEtwTotals, elapsed)
+            : new Dictionary<int, (double DownloadRate, double UploadRate)>();
+
         var grouped = enriched
             .GroupBy(c => c.Raw.Pid)
-            .Select(g => BuildProcessInfo(g.Key, g.ToList()))
+            .Select(g => BuildProcessInfo(g.Key, g.ToList(), etwRates))
             .OrderByDescending(p => p.DownloadRate + p.UploadRate)
             .ThenByDescending(p => p.ConnectionCount)
             .ToList();
+
+        string? hint = null;
+        if (!_etw.IsActive && statsEligible > 0 && statsSuccess == 0)
+            hint = "ETW 流量采集未启动，仅显示连接列表";
+        else if (_etw.IsActive && statsSuccess == 0)
+            hint = "进程流量来自 ETW；单连接速率可能不可用";
 
         return new MonitorSnapshot
         {
@@ -109,11 +127,21 @@ public sealed class NetworkMonitorService : IDisposable
             Processes = grouped,
             TotalConnections = enriched.Count,
             TotalDownloadRate = grouped.Sum(p => p.DownloadRate),
-            TotalUploadRate = grouped.Sum(p => p.UploadRate)
+            TotalUploadRate = grouped.Sum(p => p.UploadRate),
+            IsElevated = false,
+            TrafficStatsSuccessCount = statsSuccess + etwRates.Count,
+            TrafficStatsEligibleCount = Math.Max(statsEligible, grouped.Count(p => p.DownloadRate + p.UploadRate > 0)),
+            StatusHint = hint
         };
     }
 
-    private ProcessNetworkInfo BuildProcessInfo(int pid, List<EnrichedConnection> items)
+    private static bool SupportsTrafficStats(uint state) =>
+        state is 5 or 6 or 7 or 8 or 9 or 10 or 11;
+
+    private ProcessNetworkInfo BuildProcessInfo(
+        int pid,
+        List<EnrichedConnection> items,
+        Dictionary<int, (double DownloadRate, double UploadRate)> etwRates)
     {
         var (name, path) = ResolveProcess(pid);
         var details = items.Select(c => new ConnectionDetail
@@ -130,6 +158,15 @@ public sealed class NetworkMonitorService : IDisposable
             UploadRate = c.UploadRate
         }).OrderByDescending(d => d.DownloadRate + d.UploadRate).ToList();
 
+        var connDown = details.Sum(d => d.DownloadRate);
+        var connUp = details.Sum(d => d.UploadRate);
+        etwRates.TryGetValue(pid, out var etw);
+        var down = Math.Max(connDown, etw.DownloadRate);
+        var up = Math.Max(connUp, etw.UploadRate);
+
+        if (down > connDown || up > connUp)
+            DistributeEtwRatesToConnections(details, down - connDown, up - connUp);
+
         return new ProcessNetworkInfo
         {
             ProcessId = pid,
@@ -138,10 +175,45 @@ public sealed class NetworkMonitorService : IDisposable
             ConnectionCount = details.Count,
             TotalBytesIn = details.Aggregate(0UL, (a, d) => a + d.BytesIn),
             TotalBytesOut = details.Aggregate(0UL, (a, d) => a + d.BytesOut),
-            DownloadRate = details.Sum(d => d.DownloadRate),
-            UploadRate = details.Sum(d => d.UploadRate),
+            DownloadRate = down,
+            UploadRate = up,
             Connections = details
         };
+    }
+
+    private static void DistributeEtwRatesToConnections(
+        List<ConnectionDetail> details,
+        double extraDown,
+        double extraUp)
+    {
+        if (details.Count == 0 || (extraDown <= 0 && extraUp <= 0))
+            return;
+
+        var indices = Enumerable.Range(0, details.Count)
+            .Where(i => details[i].State is "ESTABLISHED" or "CLOSE_WAIT" or "FIN_WAIT1" or "FIN_WAIT2")
+            .ToList();
+        if (indices.Count == 0)
+            indices = Enumerable.Range(0, details.Count).ToList();
+
+        var shareDown = extraDown / indices.Count;
+        var shareUp = extraUp / indices.Count;
+        foreach (var i in indices)
+        {
+            var d = details[i];
+            details[i] = new ConnectionDetail
+            {
+                Protocol = d.Protocol,
+                LocalAddress = d.LocalAddress,
+                LocalPort = d.LocalPort,
+                RemoteAddress = d.RemoteAddress,
+                RemotePort = d.RemotePort,
+                State = d.State,
+                BytesIn = d.BytesIn,
+                BytesOut = d.BytesOut,
+                DownloadRate = d.DownloadRate + shareDown,
+                UploadRate = d.UploadRate + shareUp
+            };
+        }
     }
 
     private (string Name, string? Path) ResolveProcess(int pid)
@@ -184,10 +256,7 @@ public sealed class NetworkMonitorService : IDisposable
     {
         var stale = _previousBytes.Keys.Where(k => !activeKeys.Contains(k)).ToList();
         foreach (var key in stale)
-        {
             _previousBytes.Remove(key);
-            _statsEnabled.Remove(key);
-        }
     }
 
     private bool TryReadTcpStats(RawConnection conn, out ulong bytesIn, out ulong bytesOut)
@@ -195,57 +264,60 @@ public sealed class NetworkMonitorService : IDisposable
         bytesIn = 0;
         bytesOut = 0;
 
-        var rw = new TcpEstatsDataRwV0 { EnableCollection = true };
+        var rw = new TcpEstatsDataRwV0 { EnableCollection = 1 };
         var rod = new TcpEstatsDataRodV0();
-        var rwSize = (uint)Marshal.SizeOf<TcpEstatsDataRwV0>();
-        var rodSize = (uint)Marshal.SizeOf<TcpEstatsDataRodV0>();
+        var rwSize = TcpEstatsDataRwV0Size;
+        var rodSize = TcpEstatsDataRodV0Size;
 
         uint result;
         if (conn.Protocol == "TCP")
         {
-            var row = new MibTcpRow
-            {
-                State = conn.StateCode,
-                LocalAddr = conn.LocalAddrV4,
-                LocalPort = conn.LocalPortRaw,
-                RemoteAddr = conn.RemoteAddrV4,
-                RemotePort = conn.RemotePortRaw
-            };
+            var row = ToTcpRow(conn);
             result = GetPerTcpConnectionEStats(
                 ref row,
                 TcpEstatsType.TcpConnectionEstatsData,
                 ref rw, 0, rwSize,
-                ref rod, 0, rodSize,
-                IntPtr.Zero, 0, 0);
+                IntPtr.Zero, 0, 0,
+                ref rod, 0, rodSize);
         }
         else
         {
-            var row6 = new MibTcp6Row
-            {
-                LocalAddr = conn.LocalAddrV6 ?? new byte[16],
-                LocalScopeId = conn.LocalScopeId,
-                LocalPort = conn.LocalPortRaw,
-                RemoteAddr = conn.RemoteAddrV6 ?? new byte[16],
-                RemoteScopeId = conn.RemoteScopeId,
-                RemotePort = conn.RemotePortRaw,
-                State = conn.StateCode
-            };
+            var row6 = ToTcp6Row(conn);
             result = GetPerTcp6ConnectionEStats(
                 ref row6,
                 TcpEstatsType.TcpConnectionEstatsData,
                 ref rw, 0, rwSize,
-                ref rod, 0, rodSize,
-                IntPtr.Zero, 0, 0);
+                IntPtr.Zero, 0, 0,
+                ref rod, 0, rodSize);
         }
 
         if (result != 0)
             return false;
 
-        _statsEnabled.Add(conn.Key);
         bytesIn = rod.DataBytesIn;
         bytesOut = rod.DataBytesOut;
-        return true;
+        return bytesIn > 0 || bytesOut > 0;
     }
+
+    private static MibTcpRow ToTcpRow(RawConnection conn) => new()
+    {
+        State = conn.StateCode,
+        LocalAddr = conn.LocalAddrV4,
+        LocalPort = conn.LocalPortRaw,
+        RemoteAddr = conn.RemoteAddrV4,
+        RemotePort = conn.RemotePortRaw
+    };
+
+    private static MibTcp6Row ToTcp6Row(RawConnection conn) => new()
+    {
+        LocalAddr = conn.LocalAddrV6 ?? new byte[16],
+        LocalScopeId = conn.LocalScopeId,
+        LocalPort = conn.LocalPortRaw,
+        RemoteAddr = conn.RemoteAddrV6 ?? new byte[16],
+        RemoteScopeId = conn.RemoteScopeId,
+        RemotePort = conn.RemotePortRaw,
+        State = conn.StateCode
+    };
 
     private static IEnumerable<RawConnection> ReadTcpConnections() =>
         ReadTable(
@@ -388,6 +460,7 @@ public sealed class NetworkMonitorService : IDisposable
     public void Dispose()
     {
         _disposed = true;
+        _etw.Dispose();
     }
 
     private sealed class RawConnection

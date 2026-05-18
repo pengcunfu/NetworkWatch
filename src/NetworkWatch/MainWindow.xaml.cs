@@ -79,7 +79,10 @@ public partial class MainWindow : Window
             }
         }
 
-        StatusText.Text = $"活跃进程: {snapshot.Processes.Count}  |  连接总数: {snapshot.TotalConnections}  |  更新于 {snapshot.Timestamp:HH:mm:ss}";
+        var status = $"活跃进程: {snapshot.Processes.Count}  |  连接总数: {snapshot.TotalConnections}  |  流量采样: {snapshot.TrafficStatsSuccessCount}/{snapshot.TrafficStatsEligibleCount}  |  更新于 {snapshot.Timestamp:HH:mm:ss}";
+        if (!string.IsNullOrEmpty(snapshot.StatusHint))
+            status += $"  |  {snapshot.StatusHint}";
+        StatusText.Text = status;
         TotalDownloadText.Text = TrafficFormatter.FormatRate(snapshot.TotalDownloadRate);
         TotalUploadText.Text = TrafficFormatter.FormatRate(snapshot.TotalUploadRate);
     }

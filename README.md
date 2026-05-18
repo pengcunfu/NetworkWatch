@@ -44,4 +44,5 @@ dotnet publish src/NetworkWatch -c Release -r win-x64 --self-contained true -p:P
 ## 说明
 
 - 流量统计基于 Windows IP Helper API（`GetPerTcpConnectionEStats`），主要覆盖 **TCP** 连接；UDP 可显示连接，但系统不提供同等粒度的逐连接字节计数。
-- 部分系统进程或其它用户会话中的进程，可能因权限限制无法读取进程路径或流量数据；若数据不完整，可尝试 **以管理员身份运行**。
+- **无需管理员权限**：进程级流量通过 ETW（`Microsoft-Windows-TCPIP`）统计；单连接速率在可能时通过 IP Helper 补充。
+- 部分系统进程可能无法统计流量（状态栏会显示「流量采样: 成功数/可统计数」）。

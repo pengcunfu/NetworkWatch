@@ -117,19 +117,36 @@ internal static class IpHelperNative
         public MibUdp6RowOwnerPid Table;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    /// <summary>Must match TCP_ESTATS_DATA_RW_v0 (BOOLEAN EnableCollection).</summary>
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct TcpEstatsDataRwV0
     {
         [MarshalAs(UnmanagedType.U1)]
-        public bool EnableCollection;
+        public byte EnableCollection;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    /// <summary>Must match TCP_ESTATS_DATA_ROD_v0 (88 bytes, pack 1).</summary>
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct TcpEstatsDataRodV0
     {
         public ulong DataBytesOut;
+        public ulong DataSegsOut;
         public ulong DataBytesIn;
+        public ulong DataSegsIn;
+        public ulong SegsOut;
+        public ulong SegsIn;
+        public uint SoftErrors;
+        public uint SoftErrorReason;
+        public uint SndUna;
+        public uint SndNxt;
+        public uint SndMax;
+        public ulong ThruBytesAcked;
+        public uint RcvNxt;
+        public ulong ThruBytesReceived;
     }
+
+    public static readonly uint TcpEstatsDataRwV0Size = (uint)Marshal.SizeOf<TcpEstatsDataRwV0>();
+    public static readonly uint TcpEstatsDataRodV0Size = (uint)Marshal.SizeOf<TcpEstatsDataRodV0>();
 
     [DllImport("iphlpapi.dll", SetLastError = true)]
     public static extern uint GetExtendedTcpTable(
@@ -150,18 +167,46 @@ internal static class IpHelperNative
         uint reserved);
 
     [DllImport("iphlpapi.dll", SetLastError = true)]
+    public static extern uint SetPerTcpConnectionEStats(
+        ref MibTcpRow row,
+        TcpEstatsType estatsType,
+        ref TcpEstatsDataRwV0 rw,
+        uint rwVersion,
+        uint rwSize,
+        IntPtr ros,
+        uint rosVersion,
+        uint rosSize,
+        IntPtr rod,
+        uint rodVersion,
+        uint rodSize);
+
+    [DllImport("iphlpapi.dll", SetLastError = true)]
     public static extern uint GetPerTcpConnectionEStats(
         ref MibTcpRow row,
         TcpEstatsType estatsType,
         ref TcpEstatsDataRwV0 rw,
         uint rwVersion,
         uint rwSize,
+        IntPtr ros,
+        uint rosVersion,
+        uint rosSize,
         ref TcpEstatsDataRodV0 rod,
         uint rodVersion,
-        uint rodSize,
-        IntPtr road,
-        uint roadVersion,
-        uint roadSize);
+        uint rodSize);
+
+    [DllImport("iphlpapi.dll", SetLastError = true)]
+    public static extern uint SetPerTcp6ConnectionEStats(
+        ref MibTcp6Row row,
+        TcpEstatsType estatsType,
+        ref TcpEstatsDataRwV0 rw,
+        uint rwVersion,
+        uint rwSize,
+        IntPtr ros,
+        uint rosVersion,
+        uint rosSize,
+        IntPtr rod,
+        uint rodVersion,
+        uint rodSize);
 
     [DllImport("iphlpapi.dll", SetLastError = true)]
     public static extern uint GetPerTcp6ConnectionEStats(
@@ -170,12 +215,12 @@ internal static class IpHelperNative
         ref TcpEstatsDataRwV0 rw,
         uint rwVersion,
         uint rwSize,
+        IntPtr ros,
+        uint rosVersion,
+        uint rosSize,
         ref TcpEstatsDataRodV0 rod,
         uint rodVersion,
-        uint rodSize,
-        IntPtr road,
-        uint roadVersion,
-        uint roadSize);
+        uint rodSize);
 
     public static ushort PortFromNetwork(uint port) =>
         (ushort)(((port & 0xFF00) >> 8) | ((port & 0x00FF) << 8));

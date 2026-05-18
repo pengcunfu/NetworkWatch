@@ -7,4 +7,8 @@ public sealed class MonitorSnapshot
     public int TotalConnections { get; init; }
     public double TotalDownloadRate { get; init; }
     public double TotalUploadRate { get; init; }
+    public bool IsElevated { get; init; }
+    public int TrafficStatsSuccessCount { get; init; }
+    public int TrafficStatsEligibleCount { get; init; }
+    public string? StatusHint { get; init; }
 }
