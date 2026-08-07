@@ -131,12 +131,12 @@ public sealed class NetworkMonitorService : IDisposable
         {
             hint = isAdmin
                 ? "流量统计暂不可用，请稍候或重启应用"
-                : "建议右键 dev.bat → 以管理员身份运行，以启用完整流量统计";
+                : "点击「管理员模式」可临时提权，以启用完整流量统计";
         }
         else if (_etw.IsActive && statsSuccess == 0)
             hint = "进程流量来自 ETW；单连接速率可能不可用";
         else if (!_etw.IsActive && statsSuccess > 0 && !isAdmin)
-            hint = "当前为 TCP 连接级统计；管理员模式可启用 ETW 增强";
+            hint = "当前为普通模式；点击「管理员模式」可临时启用 ETW 增强统计";
 
         return new MonitorSnapshot
         {

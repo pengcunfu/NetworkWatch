@@ -36,5 +36,6 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 ## 说明
 
 - 流量统计基于 Windows IP Helper API（`GetPerTcpConnectionEStats`），主要覆盖 **TCP** 连接；UDP 可显示连接，但系统不提供同等粒度的逐连接字节计数。
-- 建议 **以管理员身份运行** `dev.bat` 以启用完整流量统计（ETW + TCP 统计）。
+- 程序默认以**普通权限**运行，无需管理员权限即可查看连接与 TCP 流量统计。
+- 如需启用完整流量统计（ETW 增强），点击界面上的「管理员模式」按钮，UAC 会临时请求提权并重启；关闭该实例后即恢复普通模式。
 - 部分系统进程可能无法统计流量（状态栏会显示「流量采样: 成功数/可统计数」）。

@@ -1,8 +1,12 @@
 ﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using NetworkWatch.Helpers;
 using NetworkWatch.Models;
 using NetworkWatch.Services;
 
@@ -59,6 +63,10 @@ public partial class MainWindow : Window
     private void ApplySnapshot(MonitorSnapshot snapshot)
     {
         _latestSnapshot = snapshot;
+        AdminButton.Content = snapshot.IsElevated ? "普通模式" : "管理员模式";
+        AdminButton.ToolTip = snapshot.IsElevated
+            ? "当前以管理员权限运行；点击可恢复普通权限"
+            : "点击以管理员身份重启，临时启用完整 ETW 流量统计";
 
         var selectedPid = _selectedPid;
         if (selectedPid is null && ProcessGrid.SelectedItem is ProcessNetworkInfo selected)
@@ -162,5 +170,72 @@ public partial class MainWindow : Window
         {
             MessageBox.Show($"刷新失败: {ex.Message}", "NetworkWatch", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private void AdminButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (AdminHelper.IsRunningAsAdministrator())
+            RestartAsNormalUser();
+        else
+            RestartAsAdministrator();
+    }
+
+    private static void RestartAsAdministrator()
+    {
+        var (fileName, arguments) = GetRestartCommand();
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                UseShellExecute = true,
+                Verb = "runas",
+                WorkingDirectory = Environment.CurrentDirectory
+            });
+            Application.Current.Shutdown();
+        }
+        catch (Win32Exception)
+        {
+            // 用户取消了 UAC 提示，继续以普通权限运行。
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"无法以管理员身份启动: {ex.Message}", "NetworkWatch",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private static void RestartAsNormalUser()
+    {
+        var (fileName, arguments) = GetRestartCommand();
+        try
+        {
+            // 经由非提权的 explorer.exe 启动，使新实例降回普通权限。
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{fileName}\" {arguments}".TrimEnd(),
+                UseShellExecute = true
+            });
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"无法以普通权限重启: {ex.Message}", "NetworkWatch",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private static (string FileName, string Arguments) GetRestartCommand()
+    {
+        var processPath = Environment.ProcessPath;
+        var assemblyPath = Assembly.GetEntryAssembly()?.Location;
+        if (processPath is not null &&
+            Path.GetFileNameWithoutExtension(processPath).Equals("dotnet", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrEmpty(assemblyPath))
+            return (processPath, $"\"{assemblyPath}\"");
+
+        return (processPath ?? assemblyPath ?? string.Empty, string.Empty);
     }
 }
