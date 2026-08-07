@@ -24,6 +24,7 @@ public partial class MainWindow : Window
         _processView.Filter = FilterProcess;
         ProcessGrid.ItemsSource = _processView;
 
+        _monitor.SortByTraffic = AutoSortCheckBox.IsChecked == true;
         _monitor.SnapshotUpdated += OnSnapshotUpdated;
         _monitor.Start();
 
@@ -63,9 +64,7 @@ public partial class MainWindow : Window
         if (selectedPid is null && ProcessGrid.SelectedItem is ProcessNetworkInfo selected)
             selectedPid = selected.ProcessId;
 
-        _processes.Clear();
-        foreach (var proc in snapshot.Processes)
-            _processes.Add(proc);
+        UpdateProcessList(snapshot.Processes);
 
         _processView.Refresh();
 
@@ -85,6 +84,45 @@ public partial class MainWindow : Window
         StatusText.Text = status;
         TotalDownloadText.Text = TrafficFormatter.FormatRate(snapshot.TotalDownloadRate);
         TotalUploadText.Text = TrafficFormatter.FormatRate(snapshot.TotalUploadRate);
+    }
+
+    private void UpdateProcessList(IReadOnlyList<ProcessNetworkInfo> processes)
+    {
+        if (_monitor.SortByTraffic)
+        {
+            _processes.Clear();
+            foreach (var proc in processes)
+                _processes.Add(proc);
+            return;
+        }
+
+        var byPid = processes.ToDictionary(p => p.ProcessId);
+        for (var i = _processes.Count - 1; i >= 0; i--)
+        {
+            if (!byPid.ContainsKey(_processes[i].ProcessId))
+                _processes.RemoveAt(i);
+        }
+
+        for (var i = 0; i < _processes.Count; i++)
+        {
+            var pid = _processes[i].ProcessId;
+            if (byPid.TryGetValue(pid, out var updated))
+                _processes[i] = updated;
+        }
+
+        var existing = new HashSet<int>(_processes.Select(p => p.ProcessId));
+        foreach (var proc in processes)
+        {
+            if (!existing.Contains(proc.ProcessId))
+                _processes.Add(proc);
+        }
+    }
+
+    private void AutoSortCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        _monitor.SortByTraffic = AutoSortCheckBox.IsChecked == true;
+        if (_latestSnapshot is not null)
+            ApplySnapshot(_latestSnapshot);
     }
 
     private void ProcessGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -23,6 +23,8 @@ public sealed class NetworkMonitorService : IDisposable
 
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(1);
 
+    public bool SortByTraffic { get; set; }
+
     public void Start()
     {
         _lastSample = DateTime.UtcNow;
@@ -113,9 +115,15 @@ public sealed class NetworkMonitorService : IDisposable
         var grouped = enriched
             .GroupBy(c => c.Raw.Pid)
             .Select(g => BuildProcessInfo(g.Key, g.ToList(), etwRates))
-            .OrderByDescending(p => p.DownloadRate + p.UploadRate)
-            .ThenByDescending(p => p.ConnectionCount)
             .ToList();
+
+        if (SortByTraffic)
+        {
+            grouped = grouped
+                .OrderByDescending(p => p.DownloadRate + p.UploadRate)
+                .ThenByDescending(p => p.ConnectionCount)
+                .ToList();
+        }
 
         var isAdmin = AdminHelper.IsRunningAsAdministrator();
         string? hint = null;
@@ -165,7 +173,14 @@ public sealed class NetworkMonitorService : IDisposable
             BytesOut = c.BytesOut,
             DownloadRate = c.DownloadRate,
             UploadRate = c.UploadRate
-        }).OrderByDescending(d => d.DownloadRate + d.UploadRate).ToList();
+        }).ToList();
+
+        if (SortByTraffic)
+        {
+            details = details
+                .OrderByDescending(d => d.DownloadRate + d.UploadRate)
+                .ToList();
+        }
 
         var connDown = details.Sum(d => d.DownloadRate);
         var connUp = details.Sum(d => d.UploadRate);
