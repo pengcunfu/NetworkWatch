@@ -5,51 +5,11 @@
         Height="560" Width="700"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanMinimize"
-        Background="#11111b"
-        Foreground="#cdd6f4"
+        Background="{DynamicResource BackgroundBrush}"
+        Foreground="{DynamicResource TextBrush}"
         FontFamily="Segoe UI"
         FontSize="13">
-    <Window.Resources>
-        <SolidColorBrush x:Key="PanelBrush" Color="#181825"/>
-        <SolidColorBrush x:Key="SurfaceBrush" Color="#1e1e2e"/>
-        <SolidColorBrush x:Key="BorderBrush" Color="#313244"/>
-        <SolidColorBrush x:Key="AccentBrush" Color="#89b4fa"/>
-        <SolidColorBrush x:Key="MutedBrush" Color="#a6adc8"/>
-        <SolidColorBrush x:Key="DownloadBrush" Color="#a6e3a1"/>
-        <SolidColorBrush x:Key="UploadBrush" Color="#f9e2af"/>
-
-        <Style TargetType="Button">
-            <Setter Property="Background" Value="#313244"/>
-            <Setter Property="Foreground" Value="#cdd6f4"/>
-            <Setter Property="BorderBrush" Value="#45475a"/>
-            <Setter Property="Padding" Value="14,8"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="6"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#45475a"/>
-                </Trigger>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Opacity" Value="0.45"/>
-                    <Setter Property="Cursor" Value="Arrow"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-    </Window.Resources>
-
-    <Grid Margin="20" Background="#11111b">
+    <Grid Margin="20" Background="{DynamicResource BackgroundBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -61,12 +21,12 @@
 
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,16">
-            <TextBlock Text="网络测速" FontSize="22" FontWeight="Bold" Foreground="{StaticResource AccentBrush}"/>
-            <TextBlock Text="测量网络下载与上传速度，数据来自公共测速节点" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
+            <TextBlock Text="网络测速" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/>
+            <TextBlock Text="测量网络下载与上传速度，数据来自公共测速节点" Foreground="{DynamicResource MutedBrush}" Margin="0,4,0,0"/>
         </StackPanel>
 
         <!-- Live status -->
-        <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="16,12">
+        <Border Grid.Row="1" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="16,12">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -75,16 +35,16 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock x:Name="PhaseText" Text="就绪" FontSize="16" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="StatusText" Text="点击「开始测速」进行测试" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="StatusText" Text="点击「开始测速」进行测试" Foreground="{DynamicResource MutedBrush}" Margin="0,4,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
                 <Grid Grid.Column="1" Margin="24,0,0,0" HorizontalAlignment="Stretch" VerticalAlignment="Center">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Text="当前速率" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right"/>
+                    <TextBlock Text="当前速率" Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Right"/>
                     <TextBlock x:Name="SpeedText" Grid.Row="1" Text="--" FontSize="18" FontWeight="Bold"
-                               Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Right"
+                               Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Right"
                                TextTrimming="CharacterEllipsis"/>
                 </Grid>
                 <Grid Grid.Column="2" Margin="24,0,0,0" HorizontalAlignment="Stretch" VerticalAlignment="Center">
@@ -92,7 +52,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Text="用时" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right"/>
+                    <TextBlock Text="用时" Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Right"/>
                     <TextBlock x:Name="ElapsedText" Grid.Row="1" Text="0.0s" FontSize="18" FontWeight="Bold"
                                HorizontalAlignment="Right"/>
                 </Grid>
@@ -106,7 +66,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <ProgressBar x:Name="MainProgressBar" Height="12" Minimum="0" Maximum="100"
-                         Foreground="{StaticResource AccentBrush}" Background="#313244"
+                         Foreground="{DynamicResource AccentBrush}" Background="{DynamicResource TrackBrush}"
                          BorderThickness="0"/>
             <TextBlock x:Name="PercentText" Grid.Column="1" Margin="12,0,0,0" Width="48"
                        VerticalAlignment="Center" HorizontalAlignment="Right" Text="0%"/>
@@ -126,37 +86,37 @@
                 <ColumnDefinition Width="12"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <Border Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="18">
+            <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="18">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Text="下载速度" Foreground="{StaticResource MutedBrush}" FontSize="14"/>
+                    <TextBlock Text="下载速度" Foreground="{DynamicResource MutedBrush}" FontSize="14"/>
                     <TextBlock x:Name="DownloadValue" Grid.Row="1" Text="--" FontSize="22" FontWeight="Bold"
-                               Foreground="{StaticResource DownloadBrush}" Margin="0,8,0,0"/>
-                    <TextBlock x:Name="DownloadDetailText" Grid.Row="2" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0" Text="下载 100 MB 测试数据"/>
+                               Foreground="{DynamicResource DownloadBrush}" Margin="0,8,0,0"/>
+                    <TextBlock x:Name="DownloadDetailText" Grid.Row="2" Foreground="{DynamicResource MutedBrush}" Margin="0,8,0,0" Text="下载 100 MB 测试数据"/>
                 </Grid>
             </Border>
-            <Border Grid.Column="2" Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="18">
+            <Border Grid.Column="2" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="18">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Text="上传速度" Foreground="{StaticResource MutedBrush}" FontSize="14"/>
+                    <TextBlock Text="上传速度" Foreground="{DynamicResource MutedBrush}" FontSize="14"/>
                     <TextBlock x:Name="UploadValue" Grid.Row="1" Text="--" FontSize="22" FontWeight="Bold"
-                               Foreground="{StaticResource UploadBrush}" Margin="0,8,0,0"/>
-                    <TextBlock x:Name="UploadDetailText" Grid.Row="2" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0" Text="上传 100 MB 测试数据"/>
+                               Foreground="{DynamicResource UploadBrush}" Margin="0,8,0,0"/>
+                    <TextBlock x:Name="UploadDetailText" Grid.Row="2" Foreground="{DynamicResource MutedBrush}" Margin="0,8,0,0" Text="上传 100 MB 测试数据"/>
                 </Grid>
             </Border>
         </Grid>
 
         <!-- Details -->
         <Border Grid.Row="5" Margin="0,14,0,0" Padding="14,10"
-                Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}"
+                Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="1" CornerRadius="8">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -166,19 +126,19 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock Text="延迟" Foreground="{StaticResource MutedBrush}"/>
+                    <TextBlock Text="延迟" Foreground="{DynamicResource MutedBrush}"/>
                     <TextBlock x:Name="PingValue" Text="--" FontWeight="SemiBold"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1">
-                    <TextBlock Text="抖动" Foreground="{StaticResource MutedBrush}"/>
+                    <TextBlock Text="抖动" Foreground="{DynamicResource MutedBrush}"/>
                     <TextBlock x:Name="JitterValue" Text="--" FontWeight="SemiBold"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2">
-                    <TextBlock Text="测速节点" Foreground="{StaticResource MutedBrush}"/>
+                    <TextBlock Text="测速节点" Foreground="{DynamicResource MutedBrush}"/>
                     <TextBlock x:Name="ServerValue" Text="--" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
                 <StackPanel Grid.Column="3">
-                    <TextBlock Text="总用时" Foreground="{StaticResource MutedBrush}"/>
+                    <TextBlock Text="总用时" Foreground="{DynamicResource MutedBrush}"/>
                     <TextBlock x:Name="DurationValue" Text="--" FontWeight="SemiBold"/>
                 </StackPanel>
             </Grid>

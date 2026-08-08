@@ -33,6 +33,7 @@ public partial class MainWindow : Window
         _monitor.SnapshotUpdated += OnSnapshotUpdated;
         _monitor.Start();
 
+        UpdateThemeButton();
         Closed += (_, _) => _monitor.Dispose();
     }
 
@@ -172,6 +173,15 @@ public partial class MainWindow : Window
             MessageBox.Show($"刷新失败: {ex.Message}", "NetworkWatch", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
+
+    private void ThemeButton_Click(object sender, RoutedEventArgs e)
+    {
+        ThemeService.Toggle();
+        UpdateThemeButton();
+    }
+
+    private void UpdateThemeButton() =>
+        ThemeButton.Content = ThemeService.Current == AppTheme.Dark ? "🌙 深色" : "☀️ 浅色";
 
     private void SpeedTestButton_Click(object sender, RoutedEventArgs e)
     {
