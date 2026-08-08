@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private bool _paused;
     private int? _selectedPid;
     private SpeedTestWindow? _speedTestWindow;
+    private PortManagerWindow? _portManagerWindow;
 
     public MainWindow()
     {
@@ -193,6 +194,18 @@ public partial class MainWindow : Window
 
         _speedTestWindow = new SpeedTestWindow { Owner = this };
         _speedTestWindow.Show();
+    }
+
+    private void PortManagerButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_portManagerWindow is { IsVisible: true })
+        {
+            _portManagerWindow.Activate();
+            return;
+        }
+
+        _portManagerWindow = new PortManagerWindow { Owner = this };
+        _portManagerWindow.Show();
     }
 
     private void AdminButton_Click(object sender, RoutedEventArgs e)
