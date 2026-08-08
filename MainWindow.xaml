@@ -108,6 +108,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBox x:Name="SearchBox"
                      Grid.Column="0"
@@ -122,7 +123,8 @@
                       Unchecked="AutoSortCheckBox_Changed"/>
             <Button x:Name="PauseButton" Grid.Column="2" Content="暂停" Margin="0,0,8,0" Click="PauseButton_Click"/>
             <Button x:Name="RefreshButton" Grid.Column="3" Content="立即刷新" Click="RefreshButton_Click"/>
-            <Button x:Name="AdminButton" Grid.Column="4" Content="管理员模式" Click="AdminButton_Click"/>
+            <Button x:Name="SpeedTestButton" Grid.Column="4" Content="测速" Margin="0,0,8,0" Click="SpeedTestButton_Click"/>
+            <Button x:Name="AdminButton" Grid.Column="5" Content="管理员模式" Click="AdminButton_Click"/>
         </Grid>
 
         <!-- Main content -->

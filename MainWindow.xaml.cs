@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private MonitorSnapshot? _latestSnapshot;
     private bool _paused;
     private int? _selectedPid;
+    private SpeedTestWindow? _speedTestWindow;
 
     public MainWindow()
     {
@@ -170,6 +171,18 @@ public partial class MainWindow : Window
         {
             MessageBox.Show($"刷新失败: {ex.Message}", "NetworkWatch", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private void SpeedTestButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_speedTestWindow is { IsVisible: true })
+        {
+            _speedTestWindow.Activate();
+            return;
+        }
+
+        _speedTestWindow = new SpeedTestWindow { Owner = this };
+        _speedTestWindow.Show();
     }
 
     private void AdminButton_Click(object sender, RoutedEventArgs e)
